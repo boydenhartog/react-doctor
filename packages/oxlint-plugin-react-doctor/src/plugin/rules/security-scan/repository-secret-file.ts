@@ -4,6 +4,7 @@ import { defineRule } from "../../utils/define-rule.js";
 import { findSuspiciousPublicEnvSecretNamePattern } from "./utils/find-suspicious-public-env-secret-name.js";
 import { getMatchLocation } from "./utils/get-match-location.js";
 import { isRepositorySecretFilePath } from "./utils/is-repository-secret-file-path.js";
+import { maskSopsEncryptedEnvEntries } from "./utils/mask-sops-encrypted-env-entries.js";
 
 const isRepositorySecretExamplePath = (relativePath: string): boolean =>
   /(?:^|\/)\.env(?:\.[^./]+)*\.(?:example|sample|template|dist|defaults?)$|(?:^|\/)[^/]*(?:example|sample|template)[^/]*\.(?:env|json|pem|key)$/i.test(
@@ -22,12 +23,13 @@ export const repositorySecretFile = defineRule({
     if (isRepositorySecretExamplePath(file.relativePath)) return [];
     if (TEST_CONTEXT_PATTERN.test(file.relativePath)) return [];
 
+    const plaintextContent = maskSopsEncryptedEnvEntries(file.content);
     const pattern =
-      SECRET_VALUE_PATTERNS.find((candidate) => candidate.test(file.content)) ??
-      findSuspiciousPublicEnvSecretNamePattern(file.content);
+      SECRET_VALUE_PATTERNS.find((candidate) => candidate.test(plaintextContent)) ??
+      findSuspiciousPublicEnvSecretNamePattern(plaintextContent);
     if (pattern === undefined) return [];
 
-    const location = getMatchLocation(file.content, pattern);
+    const location = getMatchLocation(plaintextContent, pattern);
     return [
       {
         message: "A repository credential/config file contains secret-looking values.",
